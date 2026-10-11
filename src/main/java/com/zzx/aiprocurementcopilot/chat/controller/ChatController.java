@@ -76,6 +76,7 @@ public class ChatController {
                         """)
                 .user(text)
                 .call()
+                //转换为目标对象
                 .entity(PurchaseRequirement.class);
     }
 }
