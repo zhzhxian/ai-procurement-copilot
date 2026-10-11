@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: ai-procurement-copilot
+  ai:
+    openai:
+      api-key: ${DEEPSEEK_API_KEY}
+      base-url: https://api.deepseek.com/v1
+      chat:
+        model: deepseek-chat

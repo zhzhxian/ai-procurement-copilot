@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>SSE Test</title></head>
+<body>
+<pre id="out"></pre>
+<script>
+    const msg = encodeURIComponent("写一首关于秋天的诗");
+    const es = new EventSource(`/chat/stream?message=${msg}`);
+    es.onmessage = e => document.getElementById('out').textContent += e.data;
+    es.onerror = () => es.close();
+</script>
+</body>
+</html>
