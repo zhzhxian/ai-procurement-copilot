@@ -30,4 +30,20 @@ public class ChatController {
                 .stream()
                 .content();
     }
+
+    @GetMapping("/chat/pro")
+    public String chatPro(@RequestParam String message) {
+        return chatClient.prompt()
+                .system("""
+                        你是一个企业采购领域的助手
+                        请遵守以下规则：
+                        1.只回答采购、供应商链、商品相关问题，其他问题礼貌拒绝
+                        2.回答简洁，不超过3句话
+                        3.不确定的事情明确说“我不确定”，不要编造
+                        4.涉及价格时，说明是参考区间
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
 }
