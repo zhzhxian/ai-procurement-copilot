@@ -1,6 +1,8 @@
 package com.zzx.aiprocurementcopilot.chat.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -11,8 +13,11 @@ import reactor.core.publisher.Flux;
 public class ChatController {
     private final ChatClient chatClient;
 
-    public ChatController(ChatClient.Builder builder) {
-        this.chatClient = builder.build();
+    public ChatController(ChatClient.Builder builder, ChatMemory chatMemory) {
+        this.chatClient = builder
+                //多轮对话记忆
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
     }
 
     @GetMapping("/chat")
@@ -43,6 +48,16 @@ public class ChatController {
                         4.涉及价格时，说明是参考区间
                         """)
                 .user(message)
+                .call()
+                .content();
+    }
+
+    //多轮对话记忆
+    @GetMapping("/chat/memory")
+    public String chatMemory(@RequestParam String conversationId, @RequestParam String message) {
+        return chatClient.prompt()
+                .user(message)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
     }
