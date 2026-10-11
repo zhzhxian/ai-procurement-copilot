@@ -7,3 +7,6 @@ spring:
       base-url: https://api.deepseek.com/v1
       chat:
         model: deepseek-chat
+logging:
+  level:
+    org.springframework.ai: DEBUG

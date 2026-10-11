@@ -2,6 +2,7 @@ package com.zzx.aiprocurementcopilot.chat.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +17,9 @@ public class ChatController {
     public ChatController(ChatClient.Builder builder, ChatMemory chatMemory) {
         this.chatClient = builder
                 //多轮对话记忆
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        //多轮对话日志
+                        new SimpleLoggerAdvisor())
                 .build();
     }
 
