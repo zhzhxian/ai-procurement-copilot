@@ -2,10 +2,7 @@ package com.zzx.aiprocurementcopilot.chat.controller;
 
 import com.zzx.aiprocurementcopilot.chat.model.PurchaseRequirement;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -63,6 +60,24 @@ public class ChatController {
                 .call()
                 .content();
     }
+
+
+    @GetMapping("/parse/normal")
+    public String parseNormal(@RequestParam String text) {
+        return plainChatClient.prompt()
+                .system("""
+                        你是采购需求解析助手。
+                        用户会用口语描述采购需求，请提取结构化字段。
+                        规则：
+                        1、只提取用户明确提到的信息
+                        2、没有提到的字段填 null，绝对不要编造
+                        3、日期统一转换成yyyy-MM-dd格式
+                        """)
+                .user(text)
+                .call()
+                .content();
+    }
+
     @GetMapping("/parse")
     public PurchaseRequirement parse(@RequestParam String text) {
         return plainChatClient.prompt()
@@ -78,5 +93,29 @@ public class ChatController {
                 .call()
                 //转换为目标对象
                 .entity(PurchaseRequirement.class);
+    }
+
+    @GetMapping("/parse/pro")
+    public PurchaseRequirement parsePro(@RequestParam String text) {
+        return plainChatClient.prompt()
+                .system("""
+                        你是采购需求解析助手。
+                        用户会用口语描述采购需求，请提取结构化字段。
+                        规则：
+                        1、只提取用户明确提到的信息
+                        2、没有提到的字段填 null，绝对不要编造
+                        3、日期统一转换成yyyy-MM-dd格式
+                        """)
+                .user(text)
+                .call()
+                //转换为目标对象
+                /**
+                 * validateSchema() 会做什么：
+                 * ① 生成 JSON Schema 作为格式约束给模型
+                 * ② 拿到响应后校验是否符合 Schema
+                 * ③ 不符合 → 把具体错误信息追加到 prompt 里，让模型自己改
+                 * ④ 重试（默认 3 次），仍失败才抛异常
+                 */
+                .entity(PurchaseRequirement.class, entityParamSpec -> entityParamSpec.validateSchema());
     }
 }
