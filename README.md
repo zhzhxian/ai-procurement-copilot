@@ -95,5 +95,17 @@ curl	✅ 正常
 浏览器 EventSource / 前端 fetch 流	✅ 正常（规范强制 UTF-8）
 浏览器直接打开 URL 看	❌ 乱码（仅此一种）
 
-## 下一步
-加多轮记忆和结构化输出
+## 关键点多轮对话Advisor的流程
+```
+你的代码
+   ↓
+ChatClient
+   ↓
+[Advisor 链]  ←── MessageChatMemoryAdvisor 在这里
+   ↓              （请求前：塞历史消息）
+ChatModel
+   ↓
+[Advisor 链]  ←── 响应后：存这一轮对话
+   ↓
+返回给你
+```
