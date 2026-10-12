@@ -15,7 +15,9 @@ public class ChatClientConfig {
      */
     @Bean
     public ChatClient plainChatClient(ChatClient.Builder builder) {
-        return builder.build();
+        return builder
+                .defaultAdvisors(new SimpleLoggerAdvisor())
+                .build();
     }
 
     /**
@@ -25,7 +27,7 @@ public class ChatClientConfig {
     public ChatClient memoryChatClient(ChatClient.Builder builder, ChatMemory chatMemory) {
         return builder
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        //多轮对话日志
+                        //对话日志
                         new SimpleLoggerAdvisor())
                 .build();
     }
