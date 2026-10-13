@@ -29,14 +29,22 @@ bf538d7 添加系统提示词：让模型有固定的角色、边界和输出风
 0fcf240 spring ai demo                                      ← W0 D3 - D5
 ```
 
-### W1 还差的三件事
+### W1 进度（2026-10-13）
 
-1. **全局异常处理（D6）**。现在 `/parse` 系列失败会直接 500 加堆栈，要改成返回结构化的错误信息（`PARSE_FAILED` / `MODEL_UNAVAILABLE` 这类）。顺带要想清楚三个问题，答案写进笔记：
-   - 信息不全时，应该报错，还是返回字段为 null 的对象？取决于调用方是人还是下游程序。
-   - 重试 3 次都失败、用户等了 10 秒，这个体验能接受吗？要不要加超时、降级成"返回原始文本自己看"？
-   - 模型给了明显不合理的值（比如笔记本单价 800 元），拦不拦？答案是拦——模型的输出必须当外部不可信输入处理。
-2. **成功率对比实验表（D5 Step 2）**。三个解析接口（normal / parse / pro）用同一批困难输入各跑 10 次，记录通过次数。这是 W1 最值钱的产出，面试直接用它。
-3. **日志配置修正**。`application.yml` 现在是 `logging.level.org.springframework.ai: DEBUG`，这个打不出 prompt（Spring AI 抽象层不把日志传给底层 SDK）。要看到完整请求必须两个条件同时满足：显式注册 `SimpleLoggerAdvisor`（已经在 `memoryChatClient` 上）**并且**把级别设在 `org.springframework.ai.chat.client.advisor` 包上，还要用非流式接口观察（流式接口在另一个线程执行，抓不到聚合结果）。
+已完成：D1-D5 的代码、D6 全局异常处理（`GlobalExceptionHandler`）、日志级别配置修正（`application.yml` 里两行都配了，注意必须设在 `org.springframework.ai.chat.client.advisor` 包上才有 prompt 日志）。
+
+还剩两件事：
+
+1. **成功率对比实验表（D5 Step 2）**。`/parse/normal`、`/parse`、`/parse/pro` 用同一批困难输入各跑 10 次，记录通过次数。这是 W1 最值钱的产出，面试直接用它。
+2. **写笔记 + git push**。
+
+D6 落地时修正了计划文档的一处错误：解析失败抛的是 **`tools.jackson.core.JacksonException`**（Jackson 3 里它是 RuntimeException），不是 `IllegalStateException`——`BeanOutputConverter.convert()` 内部没有任何 try/catch，Jackson 的异常原样往外抛。所以 `GlobalExceptionHandler` 捕的是 `JacksonException`。
+
+D6 的三个思考题现在的状态：
+
+- 信息不全时**报错还是返回 null 字段**——现在是报错（422 + 提示缺什么）。对调用方是人的场景，后续可以改成返回"部分对象 + missingFields 清单"，比直接 422 更友好。
+- 重试 3 次用户等 10 秒——超时和降级还没做，属于 W11 工程化的范围。
+- 模型的离谱值拦不拦——已拦值的**符号**（数量 > 0、预算 ≥ 0），但"笔记本单价 800 元"这种**合理区间**判断需要业务阈值，W2 引入商品数据后再做。
 
 ## 快速开始
 
@@ -296,7 +304,7 @@ token 用量逐轮累加（UsageAccumulator）;                       // 最终 
 
 实践结论：
 
-1. **只保结构，不保语义**。`deliveryDate` 是 String，模型给个"下周三"照样通过；`quantity` 给 99999 也通过。System Prompt 里"没提到的字段填 null、不要编造"这类要求，schema 拦不住。想收紧得给字段加约束和描述（如 `@JsonPropertyDescription`），可以先打一次 `getJsonSchema()` 看实际生成长什么样。
+1. **只保结构，不保语义**。`deliveryDate` 是 String，模型给个"下周三"照样通过；`quantity` 给 99999 也通过——schema 只管类型和必填，管不了值的合理性（那是紧凑构造器和业务阈值的事）。反过来要注意：schema 默认把所有字段都当必填，所以 prompt 里写"没提到的字段填 null"会和它直接冲突（详见知识点 7）。
 2. **成本按轮数翻**。重试是串行再调一次模型，token 逐轮累加，最坏 4 次调用，慢模型上延迟很明显。
 3. **不支持流式**。`stream()` 上叠 `validateSchema()` 直接抛 `UnsupportedOperationException`。
 4. **lambda 里改不了重试次数**。`EntityParamSpec` 只暴露两个开关（`validateSchema()` / `useProviderStructuredOutput()`），要改次数得自己构造 advisor 加进链。
@@ -311,6 +319,27 @@ token 用量逐轮累加（UsageAccumulator）;                       // 最终 
 | 输出校验 | 无 | 无 | 有（DRAFT_2020_12） |
 | 失败行为 | 不适用 | 直接抛异常 | 错误回灌 + 最多重试 3 次 |
 | 最多调用模型 | 1 次 | 1 次 | 4 次 |
+
+### 7. 校验放在哪一层（2026-10-13 补）
+
+`validateSchema()` 只校验"结构"（必填、类型、是否允许多余字段），业务规则它管不了。所以校验按三层放：
+
+| 层 | 放什么 | 失败时谁纠正 |
+|---|---|---|
+| schema 层（给模型看） | 必填性（由 `@Nullable` 决定）、字段说明（`@JsonPropertyDescription`） | ✅ validateSchema 的重试把错误喂回模型，**模型自己改** |
+| record 紧凑构造器（给程序看） | 值不变量：品类非空、数量 > 0、预算 ≥ 0 | ❌ 转换阶段直接抛异常 |
+| Controller | 只调度，不写手工 if | — |
+
+三个实测出来的关键事实：
+
+1. **裸 record 的所有组件默认都是 required**。Spring AI 生成 schema 时，没有 nullness 标注的字段一律进 `required` 列表；加了 `org.jspecify.annotations.Nullable` 才从 required 里摘除（实测：6 个字段 → 2 个），`@JsonPropertyDescription` 会写成 schema 的 `description`。
+2. **可空字段"省略"和"给 null"是两种命运**：省略该键 ✅ 通过；显式 `"unitBudget": null` ❌ 被拒（属性类型是 number，null 不属于其中）。所以 system prompt 必须写"没提到的字段直接省略"——写"填 null"会和 schema 打架：模型照做就被拒，被拒就重试，最后要么编造要么失败。
+3. **紧凑构造器抛的异常带着消息走到调用方**：Jackson 包成 `ValueInstantiationException: Cannot construct instance of 'PurchaseRequirement', problem: 数量必须大于 0`（cause 链最底层是原始 `IllegalArgumentException`），`GlobalExceptionHandler` 挖到最底层把真实原因返回给前端。
+
+两个版本差异（Spring 7 / Jackson 3 的新变化，写代码时会撞上）：
+
+- Jackson 3 里 `JacksonException` 是 **RuntimeException**（不再受检异常）；
+- Spring Framework 7 把 422 的常量改名为 `UNPROCESSABLE_CONTENT`，`UNPROCESSABLE_ENTITY` 已标注过时。
 
 ## 踩坑速查
 
@@ -328,6 +357,8 @@ token 用量逐轮累加（UsageAccumulator）;                       // 最终 
 | 找不到 `Flux` | 缺 reactor-core | pom 加 `io.projectreactor:reactor-core` |
 | `Port 8080 was already in use` | 端口被占 | `application.yml` 加 `server.port: 8081` |
 | Maven 下载卡住 | 网络 | 配阿里云镜像（`~/.m2/settings.xml`） |
+| 解析失败了却收到 503「AI 服务暂时不可用」 | 异常处理器捕了 `IllegalStateException`，而实际抛的是 Jackson 异常 | 捕 `tools.jackson.core.JacksonException`（见知识点 7） |
+| `HttpStatus.UNPROCESSABLE_ENTITY` 编译过时警告 | Spring Framework 7 把 422 的常量改名了 | 用 `HttpStatus.UNPROCESSABLE_CONTENT` |
 
 ### SSE 中文乱码：一条完整的排查链
 
@@ -351,7 +382,7 @@ data: æ—¥
 
 ## 下一步
 
-- **W1 收尾**：上面列的 D6 异常处理、D5 对比实验表、日志配置修正、笔记，然后 git push。
+- **W1 收尾**：D5 成功率对比实验表 + 写笔记 + git push（D6 异常处理和日志配置已完成）。
 - **W2 预告**：Tool Calling（定义 3 个工具让模型自己决定调用）+ Embedding 选型 + pgvector 建表入库，跑通"问题 → 最相关片段"。
 - 计划里没写的不做。想学 RAG 的时候就别顺手看微调，这是 16 周计划里的铁律之一。
 
