@@ -3,6 +3,7 @@ package com.zzx.aiprocurementcopilot.chat.controller;
 import com.zzx.aiprocurementcopilot.chat.model.PurchaseRequirement;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -97,7 +98,7 @@ public class ChatController {
 
     @GetMapping("/parse/pro")
     public PurchaseRequirement parsePro(@RequestParam String text) {
-        return plainChatClient.prompt()
+        PurchaseRequirement purchaseRequirement = plainChatClient.prompt()
                 .system("""
                         你是采购需求解析助手。
                         用户会用口语描述采购需求，请提取结构化字段。
@@ -117,5 +118,9 @@ public class ChatController {
                  * ④ 重试（默认 3 次），仍失败才抛异常
                  */
                 .entity(PurchaseRequirement.class, entityParamSpec -> entityParamSpec.validateSchema());
+        if (!StringUtils.hasText(purchaseRequirement.category())) {
+            throw new IllegalStateException("品类不能为空");
+        }
+        return purchaseRequirement;
     }
 }
